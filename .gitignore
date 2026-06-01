@@ -1,17 +1,22 @@
-# Model weights
-models/
+# IDE
+.idea/
 
-# Raw data
+# Virtual environment
+.venv/
+
+# Data folders
+Data/
 data/raw/
 
-# PDF and translation output files
-*.pdf
+# Output files
+output1.txt
 data/*.txt
 outputs/*.txt
 
+# Model weights
+models/
+
 # Python
 __pycache__/
-.venv/
 *.pyc
 .env
-.idea/

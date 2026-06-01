@@ -1,15 +1,21 @@
+# PyTorch - install manually with CUDA support (after installing requirements):
+# pip install torch --index-url https://download.pytorch.org/whl/cu124
+# Requires Python 3.11, not compatible with 3.14+
+
 # PDF processing
 pypdf
 
 # Core ML
-torch
 transformers
 datasets
 sentencepiece
 sacremoses
 
-# Training
+# Fine-tuning
 accelerate
+peft
+trl
+bitsandbytes
 
 # Evaluation
 sacrebleu
