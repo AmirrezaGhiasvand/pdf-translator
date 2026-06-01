@@ -1,7 +1,15 @@
+# Model weights
 models/
+
+# Raw data
 data/raw/
+
+# PDF and translation output files
 *.pdf
-*.txt
+data/*.txt
+outputs/*.txt
+
+# Python
 __pycache__/
 .venv/
 *.pyc

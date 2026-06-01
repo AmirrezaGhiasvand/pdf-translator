@@ -1,0 +1,18 @@
+# PDF processing
+pypdf
+
+# Core ML
+torch
+transformers
+datasets
+sentencepiece
+sacremoses
+
+# Training
+accelerate
+
+# Evaluation
+sacrebleu
+
+# Utilities
+tqdm
