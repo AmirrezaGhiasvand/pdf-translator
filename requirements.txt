@@ -7,9 +7,13 @@ pypdf
 
 # Core ML
 transformers
-datasets
+datasets==3.6.0
 sentencepiece
 sacremoses
+
+# Pinned for stability on Windows + Python 3.11
+pyarrow==21.0.0
+pandas==2.1.4
 
 # Fine-tuning
 accelerate
