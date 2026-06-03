@@ -19,13 +19,13 @@ OUTPUT_DIR        = "models/qwen-fa"
 TRAIN_PATH        = "data/processed/train.json"
 VAL_PATH          = "data/processed/val.json"
 
-MAX_SEQ_LEN       = 256
+MAX_SEQ_LEN       = 128   # reduced from 256 to speed up training, most EN↔FA pairs are under 128 chars anyway
 BATCH_SIZE        = 4
-GRAD_ACCUM        = 4   # effective batch size = BATCH_SIZE * GRAD_ACCUM = 16
-EPOCHS            = 1   # set to 1 for test run, change to 3 for full training
+GRAD_ACCUM        = 4     # effective batch size = BATCH_SIZE * GRAD_ACCUM = 16
+EPOCHS            = 2     # reduced from 3, saves ~30% training time
 LR                = 2e-4
-MAX_TRAIN_SAMPLES = 5000  # set to None for full training
-MAX_VAL_SAMPLES   = 500   # set to None for full training
+MAX_TRAIN_SAMPLES = 15000 # reduced from None (45k), sweet spot between quality and training time
+MAX_VAL_SAMPLES   = 1500  # reduced from None (5k), proportional to train set
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
         train_data = load_data(TRAIN_PATH)
         val_data   = load_data(VAL_PATH)
 
-        # use MAX_TRAIN/VAL_SAMPLES for test run, full dataset for real training
+        # use MAX_TRAIN/VAL_SAMPLES for faster training, set to None for full dataset
         if MAX_TRAIN_SAMPLES is not None:
             train_data = train_data.select(range(MAX_TRAIN_SAMPLES))
         if MAX_VAL_SAMPLES is not None:
