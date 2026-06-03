@@ -159,24 +159,39 @@ After training, the adapter is merged back into the base model.
 - Fine-tuned model learned to stop generating at the right point ✅
 - Translation quality needs full training to improve
 
-### Full Training Results
-```
-BLEU score (base model):     TBD
-BLEU score (fine-tuned):     TBD
-```
+## Results
 
----
+### Training Run (15k samples, 2 epochs)
 
-## Roadmap
+| Metric | Start | End |
+|---|---|---|
+| Train loss | 3.137 | 2.206 |
+| Eval loss | 2.388 | 2.230 |
+| Token accuracy | 45% | 56% |
+| Training time | - | 5h 19m |
 
-- [x] Dataset preparation
-- [x] QLoRA training pipeline
-- [x] Inference and comparison script
-- [ ] Full training run (3 epochs, 45k samples)
-- [ ] BLEU score evaluation
-- [ ] Merge LoRA adapter into base model
-- [ ] Convert to GGUF for Ollama
-- [ ] Integrate into PDF translation pipeline
+### Translation Comparison
+
+| Sentence | Base Model | Fine-tuned |
+|---|---|---|
+| Hello, how are you? | سلام، چه سوال دارید؟ | خوشگه، مي‌توانم براي شما چيز؟ |
+| The weather is nice today. | شمسی از دوش روز است. | اون چهارشنبه می‌خواستن |
+| Please submit your report by Friday. | شما رایج است چه تا دسترسی... | خواهيدم اينجا رو در چيزي بگيري کن |
+
+### Observations
+- Base model hallucinates heavily — adds explanations, hashtags, loops endlessly
+- Fine-tuned model learned to stop generating at the right point ✅
+- Translation quality still poor — model needs more trainable parameters and data
+- Next step: continual learning with larger LoRA config (r=64, all attention layers)
+
+### Roadmap for Improvement
+| Step | Status |
+|---|---|
+| Initial training (15k samples, 2 epochs) | ✅ Done |
+| Continual learning with larger LoRA (r=64) | 🔄 Planned |
+| Evaluate with BLEU score | ⬜ Pending |
+| Merge adapter and convert to GGUF | ⬜ Pending |
+
 
 ---
 
