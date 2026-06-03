@@ -37,16 +37,23 @@ Translate the following English text to Persian.
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=256,
-            temperature=0.3,
+            max_new_tokens=128,
+            temperature=0.1,         # lower = more focused, less hallucination
             do_sample=True,
             pad_token_id=tokenizer.eos_token_id,
-            repetition_penalty=1.3, 
+            eos_token_id=tokenizer.eos_token_id,
+            repetition_penalty=1.3,  # prevents repetition loops
         )
 
     # decode only the newly generated tokens
     new_tokens = outputs[0][inputs["input_ids"].shape[1]:]
-    return tokenizer.decode(new_tokens, skip_special_tokens=True)
+    result = tokenizer.decode(new_tokens, skip_special_tokens=True)
+
+    # cut off anything after ### headers or newlines
+    # model should stop at translation but sometimes continues
+    result = result.split("###")[0].strip()
+    result = result.split("\n")[0].strip()
+    return result
 
 def run_tests(model, tokenizer, label):
     print("\n" + "="*50)
@@ -90,4 +97,4 @@ if __name__ == "__main__":
     )
     ft_model = PeftModel.from_pretrained(ft_model, ADAPTER_DIR)
     ft_model.eval()
-    run_tests(ft_model, tokenizer, "FINE-TUNED MODEL (test run - 5k samples, 1 epoch)")
+    run_tests(ft_model, tokenizer, "FINE-TUNED MODEL (15k samples, 2 epochs)")
