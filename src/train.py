@@ -8,24 +8,25 @@ from transformers import (
     BitsAndBytesConfig,
     TrainingArguments,
 )
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer
 
 # Note that the settings and configs are based on my 4GB vram gpu if you use a different gpu you can adjust these variables based on it
 
 # -------- Settings --------
 MODEL_NAME        = "Qwen/Qwen2.5-0.5B-Instruct"
-OUTPUT_DIR        = "models/qwen-fa"
+ADAPTER_DIR       = "models/qwen-fa"          # existing adapter to continue from
+OUTPUT_DIR        = "models/qwen-fa-v2"       # new output dir for this run
 TRAIN_PATH        = "data/processed/train.json"
 VAL_PATH          = "data/processed/val.json"
 
-MAX_SEQ_LEN       = 128   # reduced from 256 to speed up training, most EN↔FA pairs are under 128 chars anyway
+MAX_SEQ_LEN       = 128
 BATCH_SIZE        = 4
-GRAD_ACCUM        = 4     # effective batch size = BATCH_SIZE * GRAD_ACCUM = 16
-EPOCHS            = 2     # reduced from 3, saves ~30% training time
-LR                = 2e-4
-MAX_TRAIN_SAMPLES = 15000 # reduced from None (45k), sweet spot between quality and training time
-MAX_VAL_SAMPLES   = 1500  # reduced from None (5k), proportional to train set
+GRAD_ACCUM        = 4    # effective batch size = BATCH_SIZE * GRAD_ACCUM = 16
+EPOCHS            = 2
+LR                = 1e-4  # reduced from 2e-4 — lower LR for continual learning to avoid forgetting
+MAX_TRAIN_SAMPLES = 30000 # increased from 15k for better coverage
+MAX_VAL_SAMPLES   = 3000  # proportional to train set
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -58,10 +59,16 @@ bnb_config = BitsAndBytesConfig(
 )
 
 # -------- LoRA Config --------
+# increased rank and target modules compared to v1 (r=16, only q_proj and v_proj)
+# this trains more parameters giving the model more capacity to learn translation
 lora_config = LoraConfig(
-    r=16,
-    lora_alpha=32,
-    target_modules=["q_proj", "v_proj"],
+    r=64,           # increased from 16 — more capacity to learn
+    lora_alpha=128, # increased from 32 — rule of thumb: lora_alpha = 2 * r
+    target_modules=[
+        "q_proj", "k_proj",
+        "v_proj", "o_proj",       # all attention layers (previously only q and v)
+        "gate_proj", "up_proj", "down_proj"  # feed-forward layers (new)
+    ],
     lora_dropout=0.05,
     bias="none",
     task_type="CAUSAL_LM",
@@ -77,7 +84,7 @@ if __name__ == "__main__":
         tokenizer.model_max_length = MAX_SEQ_LEN
         print("Step 1: Done!")
 
-        print("Step 2: Loading model in 4-bit...")
+        print("Step 2: Loading base model in 4-bit...")
         model = AutoModelForCausalLM.from_pretrained(
             MODEL_NAME,
             quantization_config=bnb_config,
@@ -86,13 +93,22 @@ if __name__ == "__main__":
         )
         print("Step 2: Done!")
 
-        print("Step 3: Preparing model for training...")
+        print("Step 3: Loading existing adapter for continual learning...")
+        model = PeftModel.from_pretrained(
+            model,
+            ADAPTER_DIR,
+            is_trainable=False  # freeze old adapter, we'll add a new one on top
+        )
+        model = model.merge_and_unload() # merge old adapter into base model
+        print("Step 3: Done!")
+
+        print("Step 4: Applying new larger LoRA on top...")
         model = prepare_model_for_kbit_training(model)
         model = get_peft_model(model, lora_config)
         model.print_trainable_parameters()
-        print("Step 3: Done!")
+        print("Step 4: Done!")
 
-        print("Step 4: Loading datasets...")
+        print("Step 5: Loading datasets...")
         train_data = load_data(TRAIN_PATH)
         val_data   = load_data(VAL_PATH)
 
@@ -104,9 +120,9 @@ if __name__ == "__main__":
 
         train_data = train_data.map(format_sample)
         val_data   = val_data.map(format_sample)
-        print(f"Step 4: Done! Train: {len(train_data)} | Val: {len(val_data)}")
+        print(f"Step 5: Done! Train: {len(train_data)} | Val: {len(val_data)}")
 
-        print("Step 5: Setting up trainer...")
+        print("Step 6: Setting up trainer...")
         training_args = TrainingArguments(
             output_dir=OUTPUT_DIR,
             num_train_epochs=EPOCHS,
@@ -131,16 +147,16 @@ if __name__ == "__main__":
             eval_dataset=val_data,
             processing_class=tokenizer,
         )
-        print("Step 5: Done!")
-
-        print("Step 6: Training...")
-        trainer.train()
         print("Step 6: Done!")
 
-        print("Step 7: Saving model...")
+        print("Step 7: Training...")
+        trainer.train()
+        print("Step 7: Done!")
+
+        print("Step 8: Saving model...")
         trainer.save_model(OUTPUT_DIR)
         tokenizer.save_pretrained(OUTPUT_DIR)
-        print(f"Step 7: Done! Model saved to {OUTPUT_DIR}")
+        print(f"Step 8: Done! Model saved to {OUTPUT_DIR}")
 
     except Exception as e:
         print(f"CRASHED at: {e}")
