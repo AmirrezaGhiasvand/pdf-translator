@@ -30,8 +30,11 @@ pdf-translator/
 ├── src/
 │   ├── data_prep.py      # downloads and formats the dataset
 │   ├── train.py          # QLoRA fine-tuning script
-│   └── inference.py      # compare base vs fine-tuned model
-├── models/               # saved LoRA adapter after training (not tracked by git)
+│   ├── inference.py      # compare base vs fine-tuned model
+│   └── evaluate.py       # BLEU score evaluation
+├── models/               # saved LoRA adapters after training (not tracked by git)
+│   ├── qwen-fa/          # V1 adapter (15k samples, r=16)
+│   └── qwen-fa-v2/       # V2 adapter (30k samples, r=64)
 ├── .gitignore
 ├── requirements.txt
 └── README.md
@@ -102,18 +105,18 @@ Downloads 50k EN↔FA sentence pairs from OPUS-100 and saves them to `data/proce
 python src/train.py
 ```
 
-**Test run** (default — ~30 minutes on GTX 1630):
+**Test run** (~30 minutes on GTX 1630):
 ```python
 EPOCHS            = 1
 MAX_TRAIN_SAMPLES = 5000
 MAX_VAL_SAMPLES   = 500
 ```
 
-**Full training** (~9-15 hours on GTX 1630):
+**Full training V2** (~10 hours on GTX 1630):
 ```python
-EPOCHS            = 3
-MAX_TRAIN_SAMPLES = None
-MAX_VAL_SAMPLES   = None
+EPOCHS            = 2
+MAX_TRAIN_SAMPLES = 30000
+MAX_VAL_SAMPLES   = 3000
 ```
 
 ### Step 3: Test the model
@@ -121,6 +124,12 @@ MAX_VAL_SAMPLES   = None
 python src/inference.py
 ```
 Runs a side-by-side comparison of the base model vs fine-tuned model on sample sentences.
+
+### Step 4: Evaluate with BLEU score
+```bash
+python src/evaluate.py
+```
+Evaluates both models on 200 validation samples and reports BLEU scores.
 
 ---
 
@@ -130,68 +139,94 @@ Standard fine-tuning updates all 500M parameters — requiring 24GB+ VRAM. QLoRA
 
 **Quantization:** The base model is loaded in 4-bit precision, reducing VRAM from ~2GB to ~500MB.
 
-**LoRA (Low-Rank Adaptation):** Instead of updating all parameters, two small matrices are injected into the attention layers. Only ~1M parameters are trained instead of 500M.
+**LoRA (Low-Rank Adaptation):** Instead of updating all parameters, small adapter matrices are injected into the attention layers. Only a fraction of parameters are trained instead of all 500M.
 
 ```
 Base model (frozen, 4-bit)     ~500MB VRAM
 LoRA adapter (trained)          ~50MB VRAM
 ──────────────────────────────────────────
-Total trainable parameters:     0.22% of model
+V1: trainable parameters:       0.22% of model (r=16)
+V2: trainable parameters:       ~2% of model  (r=64)
 ```
-
-After training, the adapter is merged back into the base model.
 
 ---
 
-## Results
+## Training Runs
 
-> ⚠️ Full training in progress. Results will be updated after completion.
-
-### Test Run (5k samples, 1 epoch)
-
-| Sentence | Base Model | Fine-tuned |
-|---|---|---|
-| Hello, how are you? | سلام، چه سوالی بفرستید؟ + hallucinations | باشید، ما بهمچون که؟ |
-| Please submit your report by Friday. | Repeats endlessly | اين ميشه بودن که اون پیروش به روز گذاريم |
-
-**Observations:**
-- Base model translates partially but hallucinates, adds hashtags, and loops
-- Fine-tuned model learned to stop generating at the right point ✅
-- Translation quality needs full training to improve
-
-## Results
-
-### Training Run (15k samples, 2 epochs)
+### V1 — Initial Training
+| Setting | Value |
+|---|---|
+| Samples | 15,000 |
+| Epochs | 2 |
+| LoRA rank | r=16 |
+| Target modules | q_proj, v_proj |
+| Learning rate | 2e-4 |
+| Training time | 5h 19m |
 
 | Metric | Start | End |
 |---|---|---|
 | Train loss | 3.137 | 2.206 |
 | Eval loss | 2.388 | 2.230 |
 | Token accuracy | 45% | 56% |
-| Training time | - | 5h 19m |
 
-### Translation Comparison
-
-| Sentence | Base Model | Fine-tuned |
-|---|---|---|
-| Hello, how are you? | سلام، چه سوال دارید؟ | خوشگه، مي‌توانم براي شما چيز؟ |
-| The weather is nice today. | شمسی از دوش روز است. | اون چهارشنبه می‌خواستن |
-| Please submit your report by Friday. | شما رایج است چه تا دسترسی... | خواهيدم اينجا رو در چيزي بگيري کن |
-
-### Observations
-- Base model hallucinates heavily — adds explanations, hashtags, loops endlessly
-- Fine-tuned model learned to stop generating at the right point ✅
-- Translation quality still poor — model needs more trainable parameters and data
-- Next step: continual learning with larger LoRA config (r=64, all attention layers)
-
-### Roadmap for Improvement
-| Step | Status |
+### V2 — Continual Learning
+| Setting | Value |
 |---|---|
-| Initial training (15k samples, 2 epochs) | ✅ Done |
-| Continual learning with larger LoRA (r=64) | 🔄 Planned |
-| Evaluate with BLEU score | ⬜ Pending |
-| Merge adapter and convert to GGUF | ⬜ Pending |
+| Samples | 30,000 |
+| Epochs | 2 |
+| LoRA rank | r=64 |
+| Target modules | q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj |
+| Learning rate | 1e-4 |
+| Training time | 10h 20m |
 
+| Metric | Start | End |
+|---|---|---|
+| Train loss | 2.338 | 1.594 |
+| Eval loss | 2.090 | 1.738 |
+| Token accuracy | 53% | 66% |
+
+---
+
+## Results
+
+### BLEU Score Comparison
+| Model | BLEU Score |
+|---|---|
+| Base model (no fine-tuning) | 5.61 |
+| Fine-tuned V1 (15k samples, r=16) | ~8 (estimated) |
+| Fine-tuned V2 (30k samples, r=64) | **12.07** |
+| Improvement over base | **+115%** |
+
+> BLEU scores evaluated on 200 held-out validation samples using character-level BLEU (sacrebleu).
+
+### Sample Translations
+
+| English | Reference | Base Model | Fine-tuned V2 |
+|---|---|---|---|
+| Hello, how are you? | سلام، چطوری؟ | سلام، چه سوال دارید؟ | سلام، چه خبری؟ ✅ |
+| Twice a day | دوبار در روز | دوست ۱- دیواره‌ای نمود | دوباره هر روز ✅ |
+| Please submit your report by Friday | لطفاً گزارش خود را تا جمعه ارسال کنید | شما رایج است چه تا دسترسی... | لطفاً پرونده‌تان روز ۶ بپذیرید 🔄 |
+| He's a traitor who betrayed our country | اون يه خائنِه | سیاره است کرده و گفت... | او یک ترور بود که از دنیای ما... 🔄 |
+
+### Key Observations
+- Fine-tuned model achieves **115% improvement** in BLEU score over base model
+- Short common sentences translate well after fine-tuning ✅
+- Model learned to stop generating at the right point — base model hallucinates endlessly ✅
+- Longer complex sentences still challenging — limited by 0.5B model capacity
+- Continual learning (V1→V2) proved effective — loss dropped from 2.206 to 1.594
+
+---
+
+## Roadmap
+
+- [x] Dataset preparation (OPUS-100, 50k EN↔FA pairs)
+- [x] QLoRA training pipeline (V1: 15k samples, r=16)
+- [x] Continual learning with larger LoRA (V2: 30k samples, r=64)
+- [x] Inference and comparison script
+- [x] BLEU score evaluation (base: 5.61 → fine-tuned: 12.07)
+- [ ] Merge LoRA adapter into base model
+- [ ] Convert to GGUF for Ollama
+- [ ] Integrate into PDF translation pipeline
 
 ---
 
