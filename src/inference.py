@@ -4,7 +4,7 @@ from peft import PeftModel
 
 # -------- Settings --------
 BASE_MODEL  = "Qwen/Qwen2.5-0.5B-Instruct"
-ADAPTER_DIR = "models/qwen-fa"
+ADAPTER_DIR = "models/qwen-fa-v2"
 
 TEST_SENTENCES = [
     "Hello, how are you?",
