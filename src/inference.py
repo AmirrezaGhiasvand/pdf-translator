@@ -24,8 +24,11 @@ bnb_config = BitsAndBytesConfig(
 
 # -------- Translate --------
 def translate(model, tokenizer, text):
+    # Option A: Simple and direct system prompt
     prompt = f"""### Instruction:
-Translate the following English text to Persian.
+You are a professional English to Persian translator.
+Translate the given text accurately and naturally.
+Output only the Persian translation, nothing else.
 
 ### Input:
 {text}
@@ -49,10 +52,13 @@ Translate the following English text to Persian.
     new_tokens = outputs[0][inputs["input_ids"].shape[1]:]
     result = tokenizer.decode(new_tokens, skip_special_tokens=True)
 
-    # cut off anything after ### headers or newlines
-    # model should stop at translation but sometimes continues
-    result = result.split("###")[0].strip()
-    result = result.split("\n")[0].strip()
+    # cut off hallucinated explanations and extra commentary
+    result = result.split("###")[0].strip()  # cut at next section header
+    result = result.split("\n")[0].strip()   # cut at first newline
+    result = result.split("(")[0].strip()    # cut parenthetical notes
+    result = result.split("[")[0].strip()    # cut bracketed notes
+    result = result.split(" -")[0].strip()   # cut extra commentary
+
     return result
 
 def run_tests(model, tokenizer, label):
@@ -97,4 +103,4 @@ if __name__ == "__main__":
     )
     ft_model = PeftModel.from_pretrained(ft_model, ADAPTER_DIR)
     ft_model.eval()
-    run_tests(ft_model, tokenizer, "FINE-TUNED MODEL (15k samples, 2 epochs)")
+    run_tests(ft_model, tokenizer, "FINE-TUNED MODEL V2 (30k samples, 2 epochs, r=64)")
