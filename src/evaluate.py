@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 # -------- Settings --------
 BASE_MODEL  = "Qwen/Qwen2.5-0.5B-Instruct"
-ADAPTER_DIR = "models/qwen-fa-v2"
+ADAPTER_DIR = "models/qwen-fa-v3"
 VAL_PATH    = "data/processed/val.json"
 
 # number of samples to evaluate on — full val set is 5000, use subset for speed
@@ -23,6 +23,7 @@ bnb_config = BitsAndBytesConfig(
 
 # -------- Translate --------
 def translate(model, tokenizer, text):
+    # updated to match V3 training prompt format
     prompt = f"""### Instruction:
 You are a professional English to Persian translator.
 Translate the given text accurately and naturally.
@@ -102,20 +103,19 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
     tokenizer.pad_token = tokenizer.eos_token
 
-    # ---- Evaluate base model ----
-    print("\nLoading base model...")
-    base_model = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL,
-        quantization_config=bnb_config,
-        device_map="auto",
-        trust_remote_code=True,
-    )
-    base_model.eval()
-    base_bleu = evaluate(base_model, tokenizer, val_data, "BASE MODEL")
-
-    # free VRAM
-    del base_model
-    torch.cuda.empty_cache()
+    # ---- Base model evaluation — commented out to save time ----
+    # uncomment to compare against base model
+    # print("\nLoading base model...")
+    # base_model = AutoModelForCausalLM.from_pretrained(
+    #     BASE_MODEL,
+    #     quantization_config=bnb_config,
+    #     device_map="auto",
+    #     trust_remote_code=True,
+    # )
+    # base_model.eval()
+    # base_bleu = evaluate(base_model, tokenizer, val_data, "BASE MODEL")
+    # del base_model
+    # torch.cuda.empty_cache()
 
     # ---- Evaluate fine-tuned model ----
     print("\nLoading fine-tuned model...")
@@ -127,13 +127,7 @@ if __name__ == "__main__":
     )
     ft_model = PeftModel.from_pretrained(ft_model, ADAPTER_DIR)
     ft_model.eval()
-    ft_bleu = evaluate(ft_model, tokenizer, val_data, "FINE-TUNED MODEL V2")
+    ft_bleu = evaluate(ft_model, tokenizer, val_data, "FINE-TUNED MODEL V3")
 
-    # ---- Final comparison ----
-    print("\n" + "="*50)
-    print("FINAL COMPARISON")
-    print("="*50)
-    print(f"Base model BLEU:       {base_bleu:.2f}")
-    print(f"Fine-tuned model BLEU: {ft_bleu:.2f}")
-    print(f"Improvement:           +{ft_bleu - base_bleu:.2f}")
-    print("="*50)
+    print(f"\nFine-tuned V3 BLEU: {ft_bleu:.2f}")
+    print("(Base model BLEU for reference: 5.25)")

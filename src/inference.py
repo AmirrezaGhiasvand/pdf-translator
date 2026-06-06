@@ -4,7 +4,7 @@ from peft import PeftModel
 
 # -------- Settings --------
 BASE_MODEL  = "Qwen/Qwen2.5-0.5B-Instruct"
-ADAPTER_DIR = "models/qwen-fa-v2"
+ADAPTER_DIR = "models/qwen-fa-v3"
 
 TEST_SENTENCES = [
     "Hello, how are you?",
@@ -103,4 +103,4 @@ if __name__ == "__main__":
     )
     ft_model = PeftModel.from_pretrained(ft_model, ADAPTER_DIR)
     ft_model.eval()
-    run_tests(ft_model, tokenizer, "FINE-TUNED MODEL V2 (30k samples, 2 epochs, r=64)")
+    run_tests(ft_model, tokenizer, "FINE-TUNED MODEL V3 (45k samples, 1 epoch, r=64)")

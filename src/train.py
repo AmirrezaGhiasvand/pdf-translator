@@ -15,18 +15,18 @@ from trl import SFTTrainer
 
 # -------- Settings --------
 MODEL_NAME        = "Qwen/Qwen2.5-0.5B-Instruct"
-ADAPTER_DIR       = "models/qwen-fa"          # existing adapter to continue from
-OUTPUT_DIR        = "models/qwen-fa-v2"       # new output dir for this run
+ADAPTER_DIR       = "models/qwen-fa-v2"  # continuing from V2
+OUTPUT_DIR        = "models/qwen-fa-v3"  # new output dir for this run
 TRAIN_PATH        = "data/processed/train.json"
 VAL_PATH          = "data/processed/val.json"
 
 MAX_SEQ_LEN       = 128
 BATCH_SIZE        = 4
-GRAD_ACCUM        = 4    # effective batch size = BATCH_SIZE * GRAD_ACCUM = 16
-EPOCHS            = 2
-LR                = 1e-4  # reduced from 2e-4 — lower LR for continual learning to avoid forgetting
-MAX_TRAIN_SAMPLES = 30000 # increased from 15k for better coverage
-MAX_VAL_SAMPLES   = 3000  # proportional to train set
+GRAD_ACCUM        = 4     # effective batch size = BATCH_SIZE * GRAD_ACCUM = 16
+EPOCHS            = 1     # one solid epoch — V2 showed diminishing returns after epoch 1.5
+LR                = 5e-5  # reduced from 1e-4 (V2) — lower LR for third round of continual learning
+MAX_TRAIN_SAMPLES = 45000 # full dataset — new data beats more epochs at this stage
+MAX_VAL_SAMPLES   = 5000  # full val set
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -37,10 +37,13 @@ def load_data(path):
     return Dataset.from_list(data)
 
 # ### headers are part of Qwen2.5's expected format. it was pre-trained seeing this pattern, so i matched it.
+# updated system prompt to match inference.py — training and inference now use the same format
 def format_sample(sample):
     return {
         "text": f"""### Instruction:
-{sample['instruction']}
+You are a professional English to Persian translator.
+Translate the given text accurately and naturally.
+Output only the Persian translation, nothing else.
 
 ### Input:
 {sample['input']}
@@ -59,15 +62,15 @@ bnb_config = BitsAndBytesConfig(
 )
 
 # -------- LoRA Config --------
-# increased rank and target modules compared to v1 (r=16, only q_proj and v_proj)
-# this trains more parameters giving the model more capacity to learn translation
+# same LoRA config as V2 — keeping r=64 and all attention layers
+# no need to change what's already working
 lora_config = LoraConfig(
-    r=64,           # increased from 16 — more capacity to learn
-    lora_alpha=128, # increased from 32 — rule of thumb: lora_alpha = 2 * r
+    r=64,           # same as V2 — more capacity to learn
+    lora_alpha=128, # rule of thumb: lora_alpha = 2 * r
     target_modules=[
         "q_proj", "k_proj",
-        "v_proj", "o_proj",       # all attention layers (previously only q and v)
-        "gate_proj", "up_proj", "down_proj"  # feed-forward layers (new)
+        "v_proj", "o_proj",              # all attention layers
+        "gate_proj", "up_proj", "down_proj"  # feed-forward layers
     ],
     lora_dropout=0.05,
     bias="none",
@@ -93,16 +96,16 @@ if __name__ == "__main__":
         )
         print("Step 2: Done!")
 
-        print("Step 3: Loading existing adapter for continual learning...")
+        print("Step 3: Loading V2 adapter for continual learning...")
         model = PeftModel.from_pretrained(
             model,
             ADAPTER_DIR,
             is_trainable=False  # freeze old adapter, we'll add a new one on top
         )
-        model = model.merge_and_unload() # merge old adapter into base model
+        model = model.merge_and_unload()  # merge V2 adapter into base model
         print("Step 3: Done!")
 
-        print("Step 4: Applying new larger LoRA on top...")
+        print("Step 4: Applying new LoRA on top of merged model...")
         model = prepare_model_for_kbit_training(model)
         model = get_peft_model(model, lora_config)
         model.print_trainable_parameters()
