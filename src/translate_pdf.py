@@ -12,8 +12,9 @@ MERGED_MODEL_DIR = "models/qwen-fa-merged"
 PDF_PATH         = "data/input.pdf"
 OUTPUT_PATH      = "data/output_fa.txt"
 
-CHUNK_SIZE       = 300
-CHUNK_OVERLAP    = 50
+# reduced chunk size — less input tokens = more room for output translation
+CHUNK_SIZE       = 200
+CHUNK_OVERLAP    = 30
 
 # -------- Quantization Config --------
 bnb_config = BitsAndBytesConfig(
@@ -24,10 +25,12 @@ bnb_config = BitsAndBytesConfig(
 )
 
 # -------- Prompt Template --------
-# same format the model was trained on
+# specialized prompt for technical/professional documents
+# explicitly instructs model to keep technical terms in English
 PROMPT_TEMPLATE = """### Instruction:
-You are a professional English to Persian translator.
-Translate the given text accurately and naturally.
+You are a professional English to Persian (Farsi) translator specializing in technical and professional documents.
+Translate accurately and naturally, preserving the original meaning and tone.
+Keep technical terms, programming languages, library names, and proper nouns in English.
 Output only the Persian translation, nothing else.
 
 ### Input:
@@ -43,14 +46,12 @@ prompt = PromptTemplate(
 
 # -------- Clean Output --------
 def clean_output(text):
+    # only cut at section headers — model has learned to stop on its own
+    # removed aggressive splits that were cutting valid Persian text
     text = text.split("### Input:")[0].strip()
     text = text.split("### Output:")[0].strip()
-    text = text.split("###")[0].strip()
-    text = text.split("\n")[0].strip()
-    text = text.split("(")[0].strip()
-    text = text.split("[")[0].strip()
-    text = text.split(" -")[0].strip()
-    return text
+    text = text.split("### Instruction:")[0].strip()
+    return text.strip()
 
 # -------- Main --------
 if __name__ == "__main__":
@@ -67,7 +68,7 @@ if __name__ == "__main__":
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
-        separators=["\n\n", "\n", ".", " "] # tries to split at natural boundaries
+        separators=["\n\n", "\n", ".", " "]  # tries to split at natural boundaries
     )
     chunks = splitter.split_documents(pages)
     print(f"Total chunks: {len(chunks)}")
@@ -92,11 +93,12 @@ if __name__ == "__main__":
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        max_new_tokens=128,
+        max_new_tokens=512,                  # increased — more room for full translations
         temperature=0.1,
         do_sample=True,
         repetition_penalty=1.3,
-        return_full_text=False,  # only return generated text, not the prompt
+        return_full_text=False,              # only return generated text, not the prompt
+        clean_up_tokenization_spaces=False,  # fixes BPE tokenizer warning
     )
 
     llm = HuggingFacePipeline(pipeline=hf_pipeline)
