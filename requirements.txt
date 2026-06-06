@@ -10,6 +10,9 @@ transformers
 datasets==3.6.0
 sentencepiece
 sacremoses
+langchain
+langchain-huggingface
+langchain-community
 
 # Pinned for stability on Windows + Python 3.11
 pyarrow==21.0.0
